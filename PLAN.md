@@ -4,8 +4,12 @@ A secure, power-fail-safe A/B bootloader for the STM32F407: signed images (SHA-2
 anti-rollback, a resumable UART update path, trial boots with automatic rollback, and a persistent
 crash record. Every phase records measurements as it is built (see §9).
 
-**Current step: Phase 0 (feasibility check) only.** Nothing past Phase 0 starts until its go/no-go
-items are resolved.
+**Status (2026-10-26):** Phase 0 is done except for the UART items (waiting for the CP2102) and
+one manual power-cycle check. Phases 1–4 and 6 are built and tested on the board over SWD.
+Phase 5 (UART) has its protocol core and simulator tests, but no wire. Detailed, current design
+docs: [`docs/flash-layout.md`](docs/flash-layout.md), [`docs/journal.md`](docs/journal.md),
+[`docs/threat-model.md`](docs/threat-model.md). Measurements: [`metrics/metrics.md`](metrics/metrics.md).
+Where this plan and the docs differ, the docs describe what was built.
 
 ---
 
@@ -74,7 +78,8 @@ Phase 0 confirms which part is on the board.
 | 10 | `active` u8, `candidate` u8 | Slot indices (0xFF = none) |
 | 12 | `version[A]`, `version[B]` u32 | From the verified image headers |
 | 20 | `min_version` u32 | Anti-rollback floor; never decreases |
-| 24 | `attempts` u8, `max_attempts` u8, `flags` u16 | Trial-boot counter |
+| 24 | `attempts` u8, `max_attempts` u8 | Trial-boot counter |
+| 26 | `rx_slot` u8, `flags` u8 | Slot being received; `SB_RF_RX` = transfer in progress |
 | 28 | `rx_session` u32, `rx_offset` u32 | Checkpoint for resumable transfer |
 | 36–55 | reserved (0xFF) | |
 | 56 | `crc32` | Over bytes 0–55 |
@@ -138,7 +143,7 @@ erases. Flash is rated for 10k cycles, which allows roughly 80k updates.
 | TRIAL | Booted at least once and waiting for `boot_confirm()`; `attempts` counts boots |
 | CONFIRMED | App confirmed health; this is `active` |
 | INVALID | Failed verification or ran out of attempts |
-| ROLLBACK | Bootloader is reverting from this slot; persisted so a power cut mid-rollback finishes the rollback |
+| ROLLBACK | Candidate ran out of attempts. Written as one atomic record (candidate cleared, active unchanged), so a power cut leaves either TRIAL with attempts = max, which repeats the decision, or ROLLBACK |
 
 ### 3.2 Boot decision
 1. Scan the journal and read the crash record and reset reason (§6).
@@ -282,25 +287,29 @@ records the git hash, board, clock, and compiler flags.
 
 | # | Phase | Exit criteria |
 |---|---|---|
-| **0** | **Feasibility check** (below) | All go/no-go items resolved and layout A or fallback chosen |
-| 1 | Skeleton: bootloader + app linker scripts per slot, handoff (VTOR, MSP, peripherals reset), UART log, DWT checkpoints | Bootloader jumps to app in A and B; sizes and timings logged |
-| 2 | Flash driver (RAM-resident), journal, `flash_sim` + exhaustive fault harness | 100% pass on journal scenarios in sim; HW erase/program timings measured |
-| 3 | Image header, signing tool, SHA-256 + Ed25519 verify on every boot | Tampered/wrong-slot/old-version images rejected; crypto timings logged |
-| 4 | State machine: PENDING/TRIAL/attempts/IWDG/`boot_confirm()`/ROLLBACK | Auto-rollback after N bad boots; fault pass counts for confirm and rollback |
-| 5 | Resumable UART protocol + host tool | Resume after cable pull and after power cut; duplicates and bad CRCs handled; throughput logged |
-| 6 | Crash record + reset reason | Bootloader prints a decoded fault after a deliberate crash; retention matrix logged |
-| 7 | Threat model doc, HW power-cut campaign, final metrics report | Report complete with honest limits |
+| # | Status |
+|---|---|
+| **0** | ✅ except F0.4 (needs UART) and the F0.5/F0.6 power-cycle check (needs a manual replug) |
+| 1 | ✅ Bootloader → app in both slots. Logging is over SWD/RTT instead of UART, with DWT checkpoints. |
+| 2 | ✅ RAM-resident driver, journal, simulator harness (100% pass), erase/program timings measured on board, plus on-silicon reset injection (`bootloader_fi`) |
+| 3 | ✅ Signing tool, SHA-256 + Ed25519 on every boot. Tamper, wrong-slot and wrong-key images are rejected, in C, Python and on the board. |
+| 4 | ✅ Trial, confirm and rollback by crash and by IWDG hang, verified on the board. Updates are staged over SWD until UART exists. |
+| 5 | ◐ Protocol core and resume logic are done and fault-tested in the simulator. The UART driver (DMA RX), the host CLI and throughput are pending the CP2102. |
+| 6 | ✅ Crash record in backup SRAM, decoded by the bootloader (precise and imprecise BusFault, DIVBYZERO, UNDEFINSTR, assert). The power-cycle row of the retention matrix is still open. |
+| 7 | ◐ Threat model written and metrics report generated. A real power-cut campaign is **not possible** (no rig). |
 
-### Phase 0 — Feasibility check (current)
+(The original exit criteria for each phase are kept in git history, `git show 513e9b2:PLAN.md`.)
+
+### Phase 0 — Feasibility check
 
 | ID | Check | Go criterion | Status (2026-10-26) |
 |---|---|---|---|
 | F0.1 | Identify the board/part: `DBGMCU_IDCODE`, flash size register at 0x1FFF_7A22 | 1 MB → layout A; 512 KB → VE layout | ✅ STM32F407G-DISC1 MB997E: DEV_ID 0x413 (IDCODE 0x101F6413), flash size reg 0x400 = 1024 KB → **layout A**. Option bytes OPTCR 0x0FFFAAED: RDP 0, no WRP, software IWDG. VDD 2.90 V (x32 programming OK) |
 | F0.2 | Cross toolchain: Arm GNU Toolchain (`arm-none-eabi-gcc`), OpenOCD or stlink | Builds and flashes a blinky | ✅ Arm GNU Toolchain 15.3.Rel2 (`~/opt/arm-gnu-toolchain-15.3.rel2`, extracted from Arm's notarized pkg, no sudo), OpenOCD 0.12.0, stlink 1.9.0. OpenOCD sees ST-LINK V2J46M31 (0483:374B). Register-level blink flashed, verified, running (LEDs cycle; read back over SWD). Factory flash backed up to `backups/factory_flash_1MB.bin` |
-| F0.3 | Crypto spike: build Monocypher (Ed25519 verify + SHA-512) and a SHA-256 for Cortex-M4 `-Os`; measure size and DWT time on the board | Bootloader estimate ≤ 32 KB → layout A, else fallback; verify < ~100 ms | ⏳ Size measured on host: Monocypher Ed25519 verify incl. SHA-512 ≈ 10.7 KB `.text` at `-Os`. Board timing still to do |
+| F0.3 | Crypto spike: build Monocypher (Ed25519 verify + SHA-512) and a SHA-256 for Cortex-M4 `-Os`; measure size and DWT time on the board | Bootloader estimate ≤ 32 KB → layout A, else fallback; verify < ~100 ms | ✅ Ed25519 verify takes **17.8 ms** on the board, with a 1.7 KB stack and 10.5 KB of code. SHA-256 runs at 2.5 MB/s. The bootloader is 19.6 KB, so **layout A** fits. |
 | F0.4 | Erase stall check: UART DMA RX keeps receiving during a 128 KB erase with code in RAM | Zero lost bytes at 921600 baud | ⏳ Board available; not yet run |
-| F0.5 | DWT CYCCNT runs without a debugger attached (TRCENA set by firmware) | Counts at 168 MHz cold-booted, no probe | ◐ CYCCNT enabled by firmware counts correctly (4,079,778 cycles per 0.255 s loop at 16 MHz). The debugger had been attached since power-up, so a cold boot with no probe is still to check |
-| F0.6 | Backup SRAM retention: SFT/IWDG/PIN reset, power cycle (VBAT wiring) | Survives resets; power-cycle behavior documented | ⏳ Board available; not yet run |
+| F0.5 | DWT CYCCNT runs without a debugger attached (TRCENA set by firmware) | Counts at 168 MHz cold-booted, no probe | ◐ CYCCNT checked against SysTick: it counts at 168 MHz. Every run so far had a debugger attached (DHCSR.C_DEBUGEN = 1). A cold boot with no probe needs a USB replug: `board.py retention --after-power-cycle` |
+| F0.6 | Backup SRAM retention: SFT/IWDG/PIN reset, power cycle (VBAT wiring) | Survives resets; power-cycle behavior documented | ◐ Kept across SFT, IWDG and debugger resets (`metrics/board_retention.json`). PINRSTF is set on every reset. Power cycle is pending the manual replug. |
 | F0.7 | Host-native simulation path: `flash_sim` + bootloader core build with host clang | Core logic compiles for host and target from one source | ✅ Host build + unit tests pass (ASan/UBSan). Quick fault harness: 22,324/22,324 runs pass. **But** mutation testing caught only 3 of 7 deliberate bugs, so the harness needs strengthening before its pass counts mean much |
 | F0.8 | QEMU `netduinoplus2` (STM32F405) as an extra target | Only if it models FLASH, DWT, and BKPSRAM. Likely not, so host sim stays the primary off-target path | ⚠️ QEMU 11.0.2 present; models unverified |
 | F0.9 | Host Python tools: pyserial, cryptography/pynacl in a venv | Imports work | ✅ `.venv` with pyserial 3.5, cryptography 50.0.2 |
