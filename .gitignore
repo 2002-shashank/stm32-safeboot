@@ -1,0 +1,9 @@
+# build outputs and local environment
+build/
+.venv/
+__pycache__/
+*.pyc
+# private signing keys never go into the repository
+keys/
+# factory flash dump of this specific board (1 MB, device-specific)
+backups/
