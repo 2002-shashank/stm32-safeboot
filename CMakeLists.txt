@@ -57,3 +57,12 @@ target_link_libraries(fault_harness sbcore)
 # Scenario tables use positional initializers with trailing fields left 0.
 target_compile_options(fault_harness PRIVATE ${SB_HOST_WARNINGS} -Wno-missing-field-initializers)
 add_test(NAME fault_harness_quick COMMAND fault_harness --quick)
+# ~1 min in a release build, ~11 min under ASan: skip with `ctest -LE slow`.
+set_tests_properties(fault_harness_quick PROPERTIES LABELS slow)
+
+add_executable(sbhost host/sbhost.c)
+target_link_libraries(sbhost sbcore)
+target_compile_options(sbhost PRIVATE ${SB_HOST_WARNINGS})
+set(SB_PYTHON ${PROJECT_SOURCE_DIR}/.venv/bin/python CACHE FILEPATH "Python with 'cryptography'")
+add_test(NAME tools_cross_language
+         COMMAND ${SB_PYTHON} ${PROJECT_SOURCE_DIR}/tools/test_tools.py $<TARGET_FILE:sbhost>)
