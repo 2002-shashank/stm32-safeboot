@@ -1,0 +1,19 @@
+scenario                     mode               ops   points     runs   passed    secs
+update_small                 exhaustive        1709     1709     8545     8545     8.5
+update_large_200k            sampled-data     50402     3562    17810    17810   101.2
+rollback                     exhaustive          64       64      320      320     0.3
+first_install                exhaustive        1709     1709     8545     8545     5.5
+update_compaction_at_1       sampled-data     10242      712     3560     3560     7.8
+update_compaction_at_2       sampled-data     10242      712     3560     3560     7.8
+update_compaction_at_3       sampled-data     10242      712     3560     3560     7.8
+update_compaction_at_4       sampled-data     10242      712     3560     3560     7.8
+update_compaction_at_5       sampled-data     10242      712     3560     3560     7.8
+update_compaction_at_6       sampled-data     10242      712     3560     3560     7.8
+update_compaction_at_7       sampled-data     10242      712     3560     3560     7.8
+rollback_compaction_at_1     exhaustive          65       65      325      325     0.4
+rollback_compaction_at_2     exhaustive          65       65      325      325     0.4
+rollback_compaction_at_3     exhaustive          65       65      325      325     0.4
+rollback_compaction_at_4     exhaustive          65       65      325      325     0.4
+resume_torn_word_sector1     exhaustive       10241    10241    51205    51205   101.2
+resume_torn_word_sector2     sampled-data      2457     2457    12285    12285    37.0
+TOTAL 124930/124930 runs passed

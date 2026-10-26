@@ -1,0 +1,38 @@
+[
+  {
+    "reset": "software reset (NVIC_SystemReset)",
+    "rcc_csr_flags": [
+      "PIN",
+      "SFT"
+    ],
+    "bkpsram_kept": true,
+    "noinit_ram_kept": true,
+    "boot_count": 3,
+    "debugger_attached": true,
+    "cyccnt_counts": true
+  },
+  {
+    "reset": "IWDG timeout",
+    "rcc_csr_flags": [
+      "PIN",
+      "IWDG"
+    ],
+    "bkpsram_kept": true,
+    "noinit_ram_kept": true,
+    "boot_count": 4,
+    "debugger_attached": true,
+    "cyccnt_counts": true
+  },
+  {
+    "reset": "debugger reset (openocd 'reset run')",
+    "rcc_csr_flags": [
+      "PIN",
+      "SFT"
+    ],
+    "bkpsram_kept": true,
+    "noinit_ram_kept": true,
+    "boot_count": 5,
+    "debugger_attached": true,
+    "cyccnt_counts": true
+  }
+]

@@ -1,0 +1,142 @@
+{
+  "confirm": {
+    "checks": [
+      [
+        "candidate B v2 gets trial boot 1/3",
+        false
+      ],
+      [
+        "app confirms",
+        true
+      ],
+      [
+        "next boot: B v2 confirmed, no trial",
+        true
+      ],
+      [
+        "journal: active=B, min_version=2, A kept as VALID",
+        true
+      ]
+    ]
+  },
+  "metrics": {
+    "rollback_crash_ms": 73.7,
+    "rollback_hang_ms": 10817.0
+  },
+  "rollback-crash": {
+    "checks": [
+      [
+        "crash: exactly 3 trial boots of B v3",
+        true
+      ],
+      [
+        "crash: automatic rollback to A v1",
+        true
+      ],
+      [
+        "crash record printed after each trial",
+        true
+      ],
+      [
+        "crash record decodes BusFault PRECISERR at 0xCCCCCCC0",
+        false
+      ],
+      [
+        "journal: B=ROLLBACK, active=A, min_version unchanged",
+        true
+      ]
+    ]
+  },
+  "all": {
+    "checks": [
+      [
+        "candidate B v2 gets trial boot 1/3",
+        true
+      ],
+      [
+        "app confirms",
+        true
+      ],
+      [
+        "next boot: B v2 confirmed, no trial",
+        true
+      ],
+      [
+        "journal: active=B, min_version=2, A kept as VALID",
+        true
+      ],
+      [
+        "crash: exactly 3 trial boots of B v3",
+        true
+      ],
+      [
+        "crash: automatic rollback to A v1",
+        true
+      ],
+      [
+        "crash record printed after each trial",
+        true
+      ],
+      [
+        "crash record decodes BusFault PRECISERR at 0xCCCCCCC0",
+        true
+      ],
+      [
+        "journal: B=ROLLBACK, active=A, min_version unchanged",
+        true
+      ],
+      [
+        "hang: exactly 3 trial boots of B v3",
+        true
+      ],
+      [
+        "hang: automatic rollback to A v1",
+        true
+      ],
+      [
+        "journal: B=ROLLBACK, active=A, min_version unchanged",
+        true
+      ],
+      [
+        "tampered candidate never boots; A v1 boots",
+        true
+      ],
+      [
+        "journal: B=INVALID",
+        true
+      ],
+      [
+        "'b' -> crash record shows PRECISERR; confirmed app boots again (no rollback)",
+        true
+      ],
+      [
+        "'w' -> crash record shows IMPRECISERR; confirmed app boots again (no rollback)",
+        true
+      ],
+      [
+        "'d' -> crash record shows DIVBYZERO; confirmed app boots again (no rollback)",
+        true
+      ],
+      [
+        "'u' -> crash record shows UNDEFINSTR; confirmed app boots again (no rollback)",
+        true
+      ],
+      [
+        "'a' -> crash record shows AppAssert; confirmed app boots again (no rollback)",
+        true
+      ],
+      [
+        "empty device stays in bootloader recovery mode",
+        false
+      ]
+    ]
+  },
+  "no-image": {
+    "checks": [
+      [
+        "empty device stays in bootloader recovery mode",
+        true
+      ]
+    ]
+  }
+}
