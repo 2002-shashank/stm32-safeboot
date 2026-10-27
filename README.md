@@ -1,5 +1,7 @@
 # stm32-safeboot
 
+[![ci](https://github.com/2002-shashank/stm32-safeboot/actions/workflows/ci.yml/badge.svg)](https://github.com/2002-shashank/stm32-safeboot/actions/workflows/ci.yml)
+
 A secure, power-fail-safe A/B bootloader for the STM32F407 (tested on the
 STM32F407G-DISC1). It provides:
 - Ed25519-signed images, verified with SHA-256 before every boot.
