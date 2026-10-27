@@ -114,3 +114,13 @@ target_link_libraries(bootloader_fi PRIVATE sb_target_core)
 target_link_options(bootloader_fi PRIVATE
     -T${CMAKE_CURRENT_SOURCE_DIR}/bootloader/bootloader.ld -Wl,-Map=bootloader_fi.map)
 sb_firmware_outputs(bootloader_fi)
+
+# Phase 0: UART echo and erase-stall checks over the external USB-serial bridge.
+add_executable(uartcheck feasibility/uartcheck.c common/uart.c common/startup.c common/board.c
+    common/flash_f4.c ${PROJECT_SOURCE_DIR}/core/src/crc32.c)
+target_include_directories(uartcheck PRIVATE ${SB_COMMON_DIR} ${SB_CMSIS_INCLUDES} ${SB_CORE_INCLUDE})
+target_compile_definitions(uartcheck PRIVATE STM32F407xx)
+target_compile_options(uartcheck PRIVATE -Os -g ${SB_TARGET_WARNINGS})
+target_link_options(uartcheck PRIVATE
+    -T${CMAKE_CURRENT_SOURCE_DIR}/bootloader/bootloader.ld -Wl,-Map=uartcheck.map)
+sb_firmware_outputs(uartcheck)

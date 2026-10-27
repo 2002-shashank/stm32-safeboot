@@ -1,0 +1,55 @@
+{
+  "port": "/dev/cu.usbserial-0001",
+  "echo": {
+    "115200": {
+      "bytes": 32768,
+      "received": 32768,
+      "mismatched_bytes": 0,
+      "uart_errors": 0,
+      "seconds": 2.854,
+      "echo_KBps": 11.2,
+      "actual_baud": 115068,
+      "baud_error_pct": -0.11
+    },
+    "460800": {
+      "bytes": 32768,
+      "received": 32768,
+      "mismatched_bytes": 0,
+      "uart_errors": 0,
+      "seconds": 0.741,
+      "echo_KBps": 43.2,
+      "actual_baud": 461538,
+      "baud_error_pct": 0.16
+    },
+    "921600": {
+      "bytes": 32768,
+      "received": 32768,
+      "mismatched_bytes": 0,
+      "uart_errors": 0,
+      "seconds": 0.393,
+      "echo_KBps": 81.4,
+      "actual_baud": 913043,
+      "baud_error_pct": -0.93
+    }
+  },
+  "erase_stall": {
+    "921600": {
+      "burst_bytes": 40960,
+      "erase_ms": 1039.0,
+      "bytes_received_during_erase": 40960,
+      "received": 40960,
+      "crc_ok": true,
+      "uart_errors": 0,
+      "max_ring_fill": 40960
+    },
+    "115200": {
+      "burst_bytes": 16384,
+      "erase_ms": 1038.0,
+      "bytes_received_during_erase": 11995,
+      "received": 16384,
+      "crc_ok": true,
+      "uart_errors": 0,
+      "max_ring_fill": 40960
+    }
+  }
+}

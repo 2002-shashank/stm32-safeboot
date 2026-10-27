@@ -4,7 +4,7 @@ A secure, power-fail-safe A/B bootloader for the STM32F407: signed images (SHA-2
 anti-rollback, a resumable UART update path, trial boots with automatic rollback, and a persistent
 crash record. Every phase records measurements as it is built (see §9).
 
-**Status (2026-10-26):** Phase 0 is done except for the UART items (waiting for the CP2102). Phases 1–4 and 6 are built and tested on the board over SWD.
+**Status (2026-10-26):** Phase 0 is done. Phases 1–4 and 6 are built and tested on the board over SWD.
 Phase 5 (UART) has its protocol core and simulator tests, but no wire. Detailed, current design
 docs: [`docs/flash-layout.md`](docs/flash-layout.md), [`docs/journal.md`](docs/journal.md),
 [`docs/threat-model.md`](docs/threat-model.md). Measurements: [`metrics/metrics.md`](metrics/metrics.md).
@@ -288,7 +288,7 @@ records the git hash, board, clock, and compiler flags.
 |---|---|---|
 | # | Status |
 |---|---|
-| **0** | ✅ except F0.4 (needs UART) |
+| **0** | ✅ |
 | 1 | ✅ Bootloader → app in both slots. Logging is over SWD/RTT instead of UART, with DWT checkpoints. |
 | 2 | ✅ RAM-resident driver, journal, simulator harness (100% pass), erase/program timings measured on board, plus on-silicon reset injection (`bootloader_fi`) |
 | 3 | ✅ Signing tool, SHA-256 + Ed25519 on every boot. Tamper, wrong-slot and wrong-key images are rejected, in C, Python and on the board. |
@@ -306,11 +306,11 @@ records the git hash, board, clock, and compiler flags.
 | F0.1 | Identify the board/part: `DBGMCU_IDCODE`, flash size register at 0x1FFF_7A22 | 1 MB → layout A; 512 KB → VE layout | ✅ STM32F407G-DISC1 MB997E: DEV_ID 0x413 (IDCODE 0x101F6413), flash size reg 0x400 = 1024 KB → **layout A**. Option bytes OPTCR 0x0FFFAAED: RDP 0, no WRP, software IWDG. VDD 2.90 V (x32 programming OK) |
 | F0.2 | Cross toolchain: Arm GNU Toolchain (`arm-none-eabi-gcc`), OpenOCD or stlink | Builds and flashes a blinky | ✅ Arm GNU Toolchain 15.3.Rel2 (`~/opt/arm-gnu-toolchain-15.3.rel2`, extracted from Arm's notarized pkg, no sudo), OpenOCD 0.12.0, stlink 1.9.0. OpenOCD sees ST-LINK V2J46M31 (0483:374B). Register-level blink flashed, verified, running (LEDs cycle; read back over SWD). Factory flash backed up to `backups/factory_flash_1MB.bin` |
 | F0.3 | Crypto spike: build Monocypher (Ed25519 verify + SHA-512) and a SHA-256 for Cortex-M4 `-Os`; measure size and DWT time on the board | Bootloader estimate ≤ 32 KB → layout A, else fallback; verify < ~100 ms | ✅ Ed25519 verify takes **17.8 ms** on the board, with a 1.7 KB stack and 10.5 KB of code. SHA-256 runs at 2.5 MB/s. The bootloader is 19.6 KB, so **layout A** fits. |
-| F0.4 | Erase stall check: UART DMA RX keeps receiving during a 128 KB erase with code in RAM | Zero lost bytes at 921600 baud | ⏳ Board available; not yet run |
+| F0.4 | Erase stall check: UART DMA RX keeps receiving during a 128 KB erase with code in RAM | Zero lost bytes at 921600 baud | ✅ At 921,600 baud the whole 40 KB burst arrived during a 1.04 s 128 KB erase (CPU stalled, DMA ring 48 KB). CRC OK, 0 UART errors (`metrics/board_uart.json`) |
 | F0.5 | DWT CYCCNT runs without a debugger attached (TRCENA set by firmware) | Counts at 168 MHz cold-booted, no probe | ✅ Cold boot after a 15 s USB unplug, no debugger attached (DHCSR.C_DEBUGEN = 0): CYCCNT enabled by firmware counts correctly against SysTick |
 | F0.6 | Backup SRAM retention: SFT/IWDG/PIN reset, power cycle (VBAT wiring) | Survives resets; power-cycle behavior documented | ✅ Kept across SFT, IWDG and debugger resets. **Lost on power-off** (POR + BOR, VBAT has no separate supply on this board). PINRSTF is set on every reset. |
 | F0.7 | Host-native simulation path: `flash_sim` + bootloader core build with host clang | Core logic compiles for host and target from one source | ✅ Host build + unit tests pass (ASan/UBSan). Quick fault harness: 22,324/22,324 runs pass. **But** mutation testing caught only 3 of 7 deliberate bugs, so the harness needs strengthening before its pass counts mean much |
 | F0.8 | QEMU `netduinoplus2` (STM32F405) as an extra target | Only if it models FLASH, DWT, and BKPSRAM. Likely not, so host sim stays the primary off-target path | ⚠️ QEMU 11.0.2 present; models unverified |
 | F0.9 | Host Python tools: pyserial, cryptography/pynacl in a venv | Imports work | ✅ `.venv` with pyserial 3.5, cryptography 50.0.2 |
 | F0.10 | Power-cut rig: MOSFET or USB relay driven by the host | Available for Phase 7 (optional; sim + software reset are used otherwise) | ✖ No rig. Real power cuts are reported as **not tested** |
-| F0.11 | ST-LINK VCP wired to a target USART? | A host serial link to the update USART | ⚠️ The VCP enumerates (`/dev/cu.usbmodem*`), but **no data arrives** from USART2/PA2, USART3/PD8 or USART6/PC6, all of which were confirmed transmitting (SR=0xC0). This matches community reports of UM1472: on the DISC1 the VCP pins are not connected to the F407. Needs a fly-wire retrofit (UM1472 §6.1.3) or a 3.3 V USB-UART adapter on PA2/PA3 |
+| F0.11 | ST-LINK VCP wired to a target USART? | A host serial link to the update USART | ✅ The ST-LINK VCP is not wired to the target (confirmed). Using the CP2102 on an ESP32 dev board (ESP32 held in reset, EN to GND): CP2102 TXD to PA3, RXD to PA2, GND common. Echo is byte-exact at 115,200 / 460,800 / 921,600 (the device divider is -0.11 / +0.16 / -0.93 %). Once, the macOS DriverKit driver (AppleUSBSLCOM) re-delivered a stale buffer at ~110 KB/s across reopens. Not reproduced since; cause unknown. Tools verify data by CRC, so it cannot pass silently |

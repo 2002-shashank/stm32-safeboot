@@ -151,9 +151,21 @@ def main() -> None:
             o.append("| Power cycle | not yet measured (needs a manual USB unplug) | | |")
         o.append("")
 
+    u = load("board_uart.json")
+    if u:
+        o += ["## UART link (CP2102 bridge on PA2/PA3, `board_uart.json`)", "",
+              "| Baud | Device actual | Echo, 32 KB random | Echo throughput |", "|---|---|---|---|"]
+        for baud, r in u["echo"].items():
+            o.append(f"| {baud} | {r['actual_baud']} ({r['baud_error_pct']:+.2f}%) | "
+                     f"{r['received']}/{r['bytes']} B, {r['mismatched_bytes']} mismatched, "
+                     f"{r['uart_errors']} UART errors | {r['echo_KBps']} KB/s |")
+        o += ["", "| Erase-stall test | 128 KB erase | Bytes arriving during the erase | Received | CRC |",
+              "|---|---|---|---|---|"]
+        for baud, r in u["erase_stall"].items():
+            o.append(f"| {baud} baud, {r['burst_bytes']} B burst | {r['erase_ms']} ms | "
+                     f"{r['bytes_received_during_erase']} | {r['received']} | {'OK' if r['crc_ok'] else 'BAD'} |")
+        o.append("")
     o += ["## Not yet measured", "",
-          "- UART throughput, resume and retry behavior (waiting for the CP2102 adapter).",
-          "- The erase-stall test: UART DMA RX during a 128 KB erase (needs UART).",
           "- Reset release → first instruction (needs a logic analyzer).", ""]
     (M / "metrics.md").write_text("\n".join(o))
     print(f"wrote {M / 'metrics.md'}")

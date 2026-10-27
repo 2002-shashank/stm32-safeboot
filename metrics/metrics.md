@@ -120,8 +120,19 @@ Chip reset before / after / in the middle of each flash op (mid-op aborts a real
 | debugger reset (openocd 'reset run') | PIN, SFT | True | True |
 | power cycle (USB unplug/replug, no debugger) | BOR, PIN, POR | False | False |
 
+## UART link (CP2102 bridge on PA2/PA3, `board_uart.json`)
+
+| Baud | Device actual | Echo, 32 KB random | Echo throughput |
+|---|---|---|---|
+| 115200 | 115068 (-0.11%) | 32768/32768 B, 0 mismatched, 0 UART errors | 11.2 KB/s |
+| 460800 | 461538 (+0.16%) | 32768/32768 B, 0 mismatched, 0 UART errors | 43.2 KB/s |
+| 921600 | 913043 (-0.93%) | 32768/32768 B, 0 mismatched, 0 UART errors | 81.4 KB/s |
+
+| Erase-stall test | 128 KB erase | Bytes arriving during the erase | Received | CRC |
+|---|---|---|---|---|
+| 921600 baud, 40960 B burst | 1039.0 ms | 40960 | 40960 | OK |
+| 115200 baud, 16384 B burst | 1038.0 ms | 11995 | 16384 | OK |
+
 ## Not yet measured
 
-- UART throughput, resume and retry behavior (waiting for the CP2102 adapter).
-- The erase-stall test: UART DMA RX during a 128 KB erase (needs UART).
 - Reset release → first instruction (needs a logic analyzer).
