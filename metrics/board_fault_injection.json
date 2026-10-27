@@ -1,0 +1,26 @@
+[
+  {
+    "scenario": "trial_confirm",
+    "flash_ops": 32,
+    "runs": 160,
+    "passed": 160,
+    "modes": "before/after/mid-op",
+    "failures": []
+  },
+  {
+    "scenario": "trial_confirm_compacting",
+    "flash_ops": 33,
+    "runs": 166,
+    "passed": 166,
+    "modes": "before/after/mid-op",
+    "failures": []
+  },
+  {
+    "scenario": "crash_rollback",
+    "flash_ops": 64,
+    "runs": 320,
+    "passed": 320,
+    "modes": "before/after/mid-op",
+    "failures": []
+  }
+]
