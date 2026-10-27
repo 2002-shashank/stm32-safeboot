@@ -1,0 +1,61 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host:
+    name: host tests (ASan/UBSan) + power-cut harness
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build clang
+          python -m pip install cryptography pyserial
+      - name: Unit + cross-language tests (ASan/UBSan)
+        env:
+          CC: clang
+        run: |
+          cmake -B build/host -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSB_PYTHON="$(which python)"
+          ninja -C build/host
+          ctest --test-dir build/host -LE slow --output-on-failure
+      - name: Power-cut harness (quick, release build)
+        env:
+          CC: clang
+        run: |
+          cmake -B build/harness -G Ninja -DCMAKE_BUILD_TYPE=Release -DSB_SANITIZE=OFF
+          ninja -C build/harness fault_harness
+          ./build/harness/fault_harness --quick
+
+  target:
+    name: firmware cross-build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Arm toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build gcc-arm-none-eabi libnewlib-arm-none-eabi
+          python -m pip install cryptography
+      - name: Build (signed with a throwaway CI key)
+        run: |
+          python tools/sbtool.py keygen --out keys/ci_ed25519.pem
+          cmake -B build/target -G Ninja -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+            -DARM_TOOLCHAIN_DIR=/usr -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DSB_SIGNING_KEY="$PWD/keys/ci_ed25519.pem" -DSB_PYTHON="$(which python)"
+          ninja -C build/target
+      - name: Check signed images
+        run: |
+          python tools/sbtool.py provision --key keys/ci_ed25519.pem --out build/prov.bin
+          for img in build/target/target/*.sbimg; do
+            python tools/sbtool.py inspect "$img" --prov build/prov.bin
+          done
