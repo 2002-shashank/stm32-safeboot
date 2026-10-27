@@ -1,0 +1,88 @@
+{
+  "app_a_v1 (4376 B)": {
+    "image_bytes": 4376,
+    "boots": 20,
+    "segments_us": {
+      "Reset_Handler->main": 71,
+      "clock init": 244,
+      "journal scan": 1318,
+      "SHA-256": 1755,
+      "Ed25519 verify": 17900,
+      "handoff": 12,
+      "total to app main": 22634
+    },
+    "min_max_us": {
+      "Reset_Handler->main": [
+        71,
+        71
+      ],
+      "clock init": [
+        244,
+        244
+      ],
+      "journal scan": [
+        1317,
+        1325
+      ],
+      "SHA-256": [
+        1755,
+        1755
+      ],
+      "Ed25519 verify": [
+        17900,
+        17900
+      ],
+      "handoff": [
+        12,
+        12
+      ],
+      "total to app main": [
+        22634,
+        22654
+      ]
+    }
+  },
+  "app_a_max (390464 B)": {
+    "image_bytes": 390464,
+    "boots": 20,
+    "segments_us": {
+      "Reset_Handler->main": 71,
+      "clock init": 244,
+      "journal scan": 1318,
+      "SHA-256": 154626,
+      "Ed25519 verify": 17545,
+      "handoff": 12,
+      "total to app main": 175150
+    },
+    "min_max_us": {
+      "Reset_Handler->main": [
+        71,
+        71
+      ],
+      "clock init": [
+        244,
+        244
+      ],
+      "journal scan": [
+        1318,
+        1325
+      ],
+      "SHA-256": [
+        154626,
+        154626
+      ],
+      "Ed25519 verify": [
+        17545,
+        17545
+      ],
+      "handoff": [
+        12,
+        12
+      ],
+      "total to app main": [
+        175150,
+        175170
+      ]
+    }
+  }
+}

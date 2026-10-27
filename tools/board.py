@@ -700,6 +700,71 @@ def cmd_scenario(a) -> None:
     sys.exit(0 if passed == len(results) else 1)
 
 
+BOOTINFO_ADDR = 0x40024000
+SEGMENTS = ["Reset_Handler->main", "clock init", "journal scan", "SHA-256", "Ed25519 verify",
+            "handoff", "total to app main"]
+
+
+def read_bootinfo(o: OpenOCD) -> dict | None:
+    w = o.read32(BOOTINFO_ADDR, 23)
+    if w[0] != 0x4F464E49:
+        return None
+    cyc = w[5:13]
+    hsi, pll = 16e6, 168e6
+    us = lambda c, hz: c * 1e6 / hz  # noqa: E731
+    seg = {
+        "Reset_Handler->main": us(cyc[1], hsi),
+        "clock init": us(cyc[2] - cyc[1], hsi),
+        "journal scan": us(cyc[3] - cyc[2], pll),
+        "SHA-256": us(cyc[4] - w[21], pll),
+        "Ed25519 verify": us(cyc[5] - cyc[4], pll),
+        "handoff": us(cyc[7] - cyc[6], pll),
+    }
+    seg["total to app main"] = us(cyc[2], hsi) + us(cyc[7] - cyc[2], pll)
+    return {"reason": (w[3] >> 8) & 0xFF, "version": w[4], "segments_us": seg}
+
+
+def cmd_boot_timing(a) -> None:
+    """Confirmed-boot timing from the boot info in backup SRAM (n boots per
+    image), so results do not depend on RTT text."""
+    out_data = {}
+    o = OpenOCD()
+    try:
+        bkpsram_unlock(o)
+        for img in a.images:
+            raw = (BUILD / f"{img}.sbimg").read_bytes()
+            size = sb.Header.parse(raw).image_size
+            deploy(o, [img])
+            o.cmd("reset run")
+            time.sleep(1.0)   # first boot adopts the image (one journal write)
+            samples = []
+            for _ in range(a.n):
+                o.cmd("reset run")
+                time.sleep(0.6)
+                o.cmd("halt")
+                bi = read_bootinfo(o)
+                if bi and bi["reason"] == 1:   # SB_R_CONFIRMED
+                    samples.append(bi["segments_us"])
+                o.cmd("resume")
+            stats = {}
+            for seg in SEGMENTS:
+                v = sorted(x[seg] for x in samples)
+                stats[seg] = round(v[len(v) // 2]) if v else None
+            spread = {seg: [round(min(x[seg] for x in samples)), round(max(x[seg] for x in samples))]
+                      for seg in SEGMENTS} if samples else {}
+            key = f"{img} ({size} B)"
+            out_data[key] = {"image_bytes": size, "boots": len(samples), "segments_us": stats,
+                             "min_max_us": spread}
+            print(f"{key}: {len(samples)} confirmed boots, median (min-max) us")
+            for seg in SEGMENTS:
+                print(f"  {seg:22s} {stats[seg]:>8}  ({spread[seg][0]}-{spread[seg][1]})")
+    finally:
+        o.close()
+    out = ROOT / "metrics" / "board_boot_timing.json"
+    out.write_text(json.dumps(out_data, indent=2) + "\n")
+    print(f"wrote {out}")
+
+
 def cmd_deploy(a) -> None:
     o = OpenOCD()
     try:
@@ -739,6 +804,10 @@ def main() -> None:
     hf.add_argument("campaigns", nargs="*")
     hf.add_argument("--no-mid", action="store_true", help="only before/after, no mid-op resets")
     hf.set_defaults(fn=cmd_hw_faults)
+    bt = sub.add_parser("boot-timing")
+    bt.add_argument("images", nargs="*", default=["app_a_v1", "app_a_max"])
+    bt.add_argument("-n", type=int, default=20)
+    bt.set_defaults(fn=cmd_boot_timing)
     lg = sub.add_parser("log")
     lg.add_argument("--secs", type=float, default=3)
     lg.set_defaults(fn=cmd_log)
