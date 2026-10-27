@@ -1,0 +1,15 @@
+[
+  {
+    "reset": "power cycle (USB unplug/replug, no debugger)",
+    "rcc_csr_flags": [
+      "BOR",
+      "PIN",
+      "POR"
+    ],
+    "bkpsram_kept": false,
+    "noinit_ram_kept": false,
+    "boot_count": 1,
+    "debugger_attached": false,
+    "cyccnt_counts": true
+  }
+]

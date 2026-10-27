@@ -65,7 +65,13 @@ that every region starts and ends on a sector boundary.
 | `NVIC_SystemReset` | PIN, SFT | kept | kept |
 | IWDG timeout | PIN, IWDG | kept | kept |
 | Debugger reset (`reset run`) | PIN, SFT | kept | kept |
-| Power cycle | *not yet measured* (needs a USB unplug and replug) | expected lost: VBAT is tied to VDD on the DISC1 (to confirm) | lost |
+| Power cycle (USB unplugged 15 s, cold boot with no debugger) | BOR, PIN, POR | **lost** | lost |
 
 The F4 sets PINRSTF on *every* reset, because an internal reset also drives
 the NRST pin. Only a reset with PIN alone means an external reset.
+
+Consequence: the crash record and boot info survive every reset (including
+the watchdog reset that ends a hung trial), but **not a power loss**. On this
+board VBAT has no separate supply, so the backup domain is unpowered when USB
+is removed. A crash followed by a power cut loses the record. The trial
+attempt counter is unaffected, because it lives in the flash journal.

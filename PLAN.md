@@ -4,8 +4,7 @@ A secure, power-fail-safe A/B bootloader for the STM32F407: signed images (SHA-2
 anti-rollback, a resumable UART update path, trial boots with automatic rollback, and a persistent
 crash record. Every phase records measurements as it is built (see §9).
 
-**Status (2026-10-26):** Phase 0 is done except for the UART items (waiting for the CP2102) and
-one manual power-cycle check. Phases 1–4 and 6 are built and tested on the board over SWD.
+**Status (2026-10-26):** Phase 0 is done except for the UART items (waiting for the CP2102). Phases 1–4 and 6 are built and tested on the board over SWD.
 Phase 5 (UART) has its protocol core and simulator tests, but no wire. Detailed, current design
 docs: [`docs/flash-layout.md`](docs/flash-layout.md), [`docs/journal.md`](docs/journal.md),
 [`docs/threat-model.md`](docs/threat-model.md). Measurements: [`metrics/metrics.md`](metrics/metrics.md).
@@ -289,13 +288,13 @@ records the git hash, board, clock, and compiler flags.
 |---|---|---|
 | # | Status |
 |---|---|
-| **0** | ✅ except F0.4 (needs UART) and the F0.5/F0.6 power-cycle check (needs a manual replug) |
+| **0** | ✅ except F0.4 (needs UART) |
 | 1 | ✅ Bootloader → app in both slots. Logging is over SWD/RTT instead of UART, with DWT checkpoints. |
 | 2 | ✅ RAM-resident driver, journal, simulator harness (100% pass), erase/program timings measured on board, plus on-silicon reset injection (`bootloader_fi`) |
 | 3 | ✅ Signing tool, SHA-256 + Ed25519 on every boot. Tamper, wrong-slot and wrong-key images are rejected, in C, Python and on the board. |
 | 4 | ✅ Trial, confirm and rollback by crash and by IWDG hang, verified on the board. Updates are staged over SWD until UART exists. |
 | 5 | ◐ Protocol core and resume logic are done and fault-tested in the simulator. The UART driver (DMA RX), the host CLI and throughput are pending the CP2102. |
-| 6 | ✅ Crash record in backup SRAM, decoded by the bootloader (precise and imprecise BusFault, DIVBYZERO, UNDEFINSTR, assert). The power-cycle row of the retention matrix is still open. |
+| 6 | ✅ Crash record in backup SRAM, decoded by the bootloader (precise and imprecise BusFault, DIVBYZERO, UNDEFINSTR, assert). Measured: the record survives every reset type but not power-off. |
 | 7 | ◐ Threat model written and metrics report generated. A real power-cut campaign is **not possible** (no rig). |
 
 (The original exit criteria for each phase are kept in git history, `git show 513e9b2:PLAN.md`.)
@@ -308,8 +307,8 @@ records the git hash, board, clock, and compiler flags.
 | F0.2 | Cross toolchain: Arm GNU Toolchain (`arm-none-eabi-gcc`), OpenOCD or stlink | Builds and flashes a blinky | ✅ Arm GNU Toolchain 15.3.Rel2 (`~/opt/arm-gnu-toolchain-15.3.rel2`, extracted from Arm's notarized pkg, no sudo), OpenOCD 0.12.0, stlink 1.9.0. OpenOCD sees ST-LINK V2J46M31 (0483:374B). Register-level blink flashed, verified, running (LEDs cycle; read back over SWD). Factory flash backed up to `backups/factory_flash_1MB.bin` |
 | F0.3 | Crypto spike: build Monocypher (Ed25519 verify + SHA-512) and a SHA-256 for Cortex-M4 `-Os`; measure size and DWT time on the board | Bootloader estimate ≤ 32 KB → layout A, else fallback; verify < ~100 ms | ✅ Ed25519 verify takes **17.8 ms** on the board, with a 1.7 KB stack and 10.5 KB of code. SHA-256 runs at 2.5 MB/s. The bootloader is 19.6 KB, so **layout A** fits. |
 | F0.4 | Erase stall check: UART DMA RX keeps receiving during a 128 KB erase with code in RAM | Zero lost bytes at 921600 baud | ⏳ Board available; not yet run |
-| F0.5 | DWT CYCCNT runs without a debugger attached (TRCENA set by firmware) | Counts at 168 MHz cold-booted, no probe | ◐ CYCCNT checked against SysTick: it counts at 168 MHz. Every run so far had a debugger attached (DHCSR.C_DEBUGEN = 1). A cold boot with no probe needs a USB replug: `board.py retention --after-power-cycle` |
-| F0.6 | Backup SRAM retention: SFT/IWDG/PIN reset, power cycle (VBAT wiring) | Survives resets; power-cycle behavior documented | ◐ Kept across SFT, IWDG and debugger resets (`metrics/board_retention.json`). PINRSTF is set on every reset. Power cycle is pending the manual replug. |
+| F0.5 | DWT CYCCNT runs without a debugger attached (TRCENA set by firmware) | Counts at 168 MHz cold-booted, no probe | ✅ Cold boot after a 15 s USB unplug, no debugger attached (DHCSR.C_DEBUGEN = 0): CYCCNT enabled by firmware counts correctly against SysTick |
+| F0.6 | Backup SRAM retention: SFT/IWDG/PIN reset, power cycle (VBAT wiring) | Survives resets; power-cycle behavior documented | ✅ Kept across SFT, IWDG and debugger resets. **Lost on power-off** (POR + BOR, VBAT has no separate supply on this board). PINRSTF is set on every reset. |
 | F0.7 | Host-native simulation path: `flash_sim` + bootloader core build with host clang | Core logic compiles for host and target from one source | ✅ Host build + unit tests pass (ASan/UBSan). Quick fault harness: 22,324/22,324 runs pass. **But** mutation testing caught only 3 of 7 deliberate bugs, so the harness needs strengthening before its pass counts mean much |
 | F0.8 | QEMU `netduinoplus2` (STM32F405) as an extra target | Only if it models FLASH, DWT, and BKPSRAM. Likely not, so host sim stays the primary off-target path | ⚠️ QEMU 11.0.2 present; models unverified |
 | F0.9 | Host Python tools: pyserial, cryptography/pynacl in a venv | Imports work | ✅ `.venv` with pyserial 3.5, cryptography 50.0.2 |

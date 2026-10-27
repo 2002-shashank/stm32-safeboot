@@ -154,7 +154,6 @@ def main() -> None:
     o += ["## Not yet measured", "",
           "- UART throughput, resume and retry behavior (waiting for the CP2102 adapter).",
           "- The erase-stall test: UART DMA RX during a 128 KB erase (needs UART).",
-          "- Power-cycle retention, and DWT after a cold boot with no debugger (needs a manual replug).",
           "- Reset release → first instruction (needs a logic analyzer).", ""]
     (M / "metrics.md").write_text("\n".join(o))
     print(f"wrote {M / 'metrics.md'}")

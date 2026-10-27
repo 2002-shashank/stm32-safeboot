@@ -38,13 +38,13 @@ Bootloader flash by module (from the linker map):
 |---|---|
 | SHA-256 throughput | 2.53 MB/s (66.5 cycles/B) |
 | SHA-256, 64 KB / 384 KB | 26.0 ms / 155.7 ms |
-| Ed25519 verify (Monocypher 4.0.2) | 17.83 ms (2996093 cycles), stack 1672 B |
+| Ed25519 verify (Monocypher 4.0.2) | 17.83 ms (2996077 cycles), stack 1672 B |
 | Ed25519 accepts reference signature / rejects tampered | True / True |
 | CRC32 (nibble table), 1 KB | 112 µs |
-| Sector erase 16 / 64 / 128 KB | 195 / 548 / 1020 ms |
+| Sector erase 16 / 64 / 128 KB | 203 / 501 / 1028 ms |
 | Word program | 14.3 µs/word, 272 KB/s |
 | Journal scan empty / full page | 1.28 / 2.27 ms |
-| Journal append / compacting append | 198 µs / 196 ms |
+| Journal append / compacting append | 198 µs / 203 ms |
 
 ## Validated boot time (DWT, on board, `board_boot_timing.json`)
 
@@ -118,11 +118,10 @@ Chip reset before / after / in the middle of each flash op (mid-op aborts a real
 | software reset (NVIC_SystemReset) | PIN, SFT | True | True |
 | IWDG timeout | PIN, IWDG | True | True |
 | debugger reset (openocd 'reset run') | PIN, SFT | True | True |
-| Power cycle | not yet measured (needs a manual USB unplug) | | |
+| power cycle (USB unplug/replug, no debugger) | BOR, PIN, POR | False | False |
 
 ## Not yet measured
 
 - UART throughput, resume and retry behavior (waiting for the CP2102 adapter).
 - The erase-stall test: UART DMA RX during a 128 KB erase (needs UART).
-- Power-cycle retention, and DWT after a cold boot with no debugger (needs a manual replug).
 - Reset release → first instruction (needs a logic analyzer).
