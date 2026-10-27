@@ -80,10 +80,15 @@ Flash is rated for 10k erase cycles, which allows roughly 80k updates.
 
 ## How power-fail safety is tested
 
+Harness note: while the device erases flash, the host must not read flash
+over SWD. Such a read stalls until the erase ends. In testing, the device
+then sometimes failed to take its own reset request. The on-silicon
+harness only polls backup SRAM while the device runs.
+
 | Level | What | Result |
 |---|---|---|
 | Unit | Each validity layer alone, torn records, compaction (`test_core`) | Pass under ASan/UBSan |
-| Simulator | `fault_harness`: power cut at every flash op × 5 variants (not done / done / torn-random / torn-prefix / sparse partial erase). Checks journal = before-or-after, boot safety, min_version monotonic, convergence, liveness, no overwrite. | `metrics/fault_sim.csv` |
+| Simulator (**124,930/124,930 pass**) | `fault_harness`: power cut at every flash op × 5 variants (not done / done / torn-random / torn-prefix / sparse partial erase). Checks journal = before-or-after, boot safety, min_version monotonic, convergence, liveness, no overwrite. | `metrics/fault_sim.csv` |
 | Harness self-test | Seven deliberate bugs. Every real bug is caught; the one survivor is an equivalent mutant, because writing the CRC word last is still atomic. | See the commit log |
-| Silicon | `bootloader_fi`: chip reset before, after, and in the middle of each flash op of real trial / confirm / compaction / rollback sequences. Mid-op resets abort real word programs and real sector erases. | `metrics/board_fault_injection.json` |
+| Silicon | `bootloader_fi`: chip reset before, after, and in the middle of each flash op of real trial / confirm / compaction / rollback sequences. Mid-op resets abort real word programs and real sector erases. | **646/646 pass** (`metrics/board_fault_injection.json`) |
 | Power cut | Not tested. No power-switching rig. | — |

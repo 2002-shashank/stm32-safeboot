@@ -32,8 +32,9 @@ that every region starts and ends on a sector boundary.
 - **Ownership.** "Bootloader code only" includes `boot_confirm()`. The app
   calls it through the API table, but the code that writes the journal lives
   in the bootloader. The app never links a flash driver.
-- **Bootloader budget.** 19.6 KB is used out of 32 KB (31.7 KB usable after
-  the API table). Ed25519 verify with SHA-512 is about 10.7 KB of that.
+- **Bootloader budget.** 19.1 KB is used out of 32 KB (31.7 KB usable after
+  the API table). Ed25519 verify with SHA-512 is about 10.5 KB of that. Its
+  fault handlers record a crash (slot 0xFF) and reset rather than hang.
 - **Image layout.** Each slot holds a 512 B header followed by the payload,
   which starts with the vector table at `slot + 0x200`. The F407 has 98
   vectors (392 B), so VTOR needs 512 B alignment.
