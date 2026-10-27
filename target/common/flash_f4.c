@@ -48,6 +48,54 @@ RAMFUNC static uint32_t ram_run(uint32_t cr, volatile uint32_t *dst, uint32_t va
     return FLASH->SR;
 }
 
+#ifdef SB_FAULT_INJECT
+/*
+ * Hardware fault injection (bootloader_fi build only). The host arms it over
+ * SWD; the op counter lives in backup SRAM so it counts across resets, in
+ * bootloader and app (boot_confirm) context alike. At op k the chip resets:
+ *   mode 0: before the op, 1: mid-op (delay cycles after start), 2: after.
+ * A reset during an erase/program aborts it, so mode 1 produces real torn
+ * words and partially erased sectors on silicon.
+ */
+#include "rtt.h"
+#include "sb/fault_inject.h"
+
+#define FI ((volatile sb_fi_t *)SB_FI_ADDR)
+
+RAMFUNC static void ram_run_and_reset(uint32_t cr, volatile uint32_t *dst, uint32_t value,
+                                      uint32_t delay)
+{
+    FLASH->CR = cr;
+    if (dst)
+        *dst = value;
+    else
+        FLASH->CR = cr | FLASH_CR_STRT;
+    uint32_t t0 = DWT->CYCCNT;
+    while (DWT->CYCCNT - t0 < delay)
+        ;
+    SCB->AIRCR = (0x5FAu << SCB_AIRCR_VECTKEY_Pos) | SCB_AIRCR_SYSRESETREQ_Msk;
+    for (;;)
+        ;
+}
+
+/* Returns the mode to apply to this op, or -1 for a normal op. */
+static int fi_check(uint32_t addr)
+{
+    if (FI->magic != SB_FI_MAGIC || FI->fired)
+        return -1;
+    uint32_t idx = FI->count++;
+    if (idx != FI->armed_k)
+        return -1;
+    FI->fired = 1;
+    FI->fired_addr = addr;
+    sb_printf("[fi] reset at flash op %u (0x%08x) mode %u delay %u\r\n", idx, addr, FI->mode,
+              FI->delay_cyc);
+    if (FI->mode == SB_FI_BEFORE)
+        NVIC_SystemReset();
+    return (int)FI->mode;
+}
+#endif
+
 /* ART caches may hold stale flash contents after erase/program (RM0090
  * 3.5.2): reset them. */
 static void flush_caches(void)
@@ -73,7 +121,16 @@ int sb_flash_erase_sector(unsigned sector)
     uint32_t cr = FLASH_CR_SER | (sector << FLASH_CR_SNB_Pos) | FLASH_CR_PSIZE_1;
     uint32_t primask = __get_PRIMASK();
     __disable_irq();
+#ifdef SB_FAULT_INJECT
+    int fi = fi_check(sb_sector_addr(sector));
+    if (fi == SB_FI_MID)
+        ram_run_and_reset(cr, 0, 0, FI->delay_cyc);
+#endif
     uint32_t sr = ram_run(cr, 0, 0);
+#ifdef SB_FAULT_INJECT
+    if (fi == SB_FI_AFTER)
+        NVIC_SystemReset();
+#endif
     flush_caches();
     __set_PRIMASK(primask);
     lock();
@@ -94,7 +151,17 @@ int sb_flash_program(uint32_t addr, const void *src, uint32_t len)
     for (uint32_t i = 0; i < len && rc == 0; i += 4) {
         uint32_t w = (uint32_t)s[i] | (uint32_t)s[i + 1] << 8 | (uint32_t)s[i + 2] << 16 |
                      (uint32_t)s[i + 3] << 24;
+#ifdef SB_FAULT_INJECT
+        int fi = fi_check(addr + i);
+        if (fi == SB_FI_MID)
+            ram_run_and_reset(FLASH_CR_PG | FLASH_CR_PSIZE_1, (volatile uint32_t *)(addr + i), w,
+                              FI->delay_cyc);
+#endif
         uint32_t sr = ram_run(FLASH_CR_PG | FLASH_CR_PSIZE_1, (volatile uint32_t *)(addr + i), w);
+#ifdef SB_FAULT_INJECT
+        if (fi == SB_FI_AFTER)
+            NVIC_SystemReset();
+#endif
         rc = finish(sr);
     }
     flush_caches();

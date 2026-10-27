@@ -14,6 +14,10 @@
 #include "sb/image.h"
 #include "sb/journal.h"
 #include "sb/layout.h"
+#ifdef SB_FAULT_INJECT
+#include "sb/fault_inject.h"
+#define FI ((volatile sb_fi_t *)SB_FI_ADDR)
+#endif
 
 #define SB_TRIAL_WDG_MS 4000u
 
@@ -65,8 +69,13 @@ static void report_crash(uint32_t rr)
 
 static __attribute__((noreturn)) void update_mode(const char *why)
 {
+#ifdef SB_FAULT_INJECT
+    if (FI->magic == SB_FI_MAGIC)
+        FI->recovery++;
+#endif
+    /* 32-bit divide: a 64-bit one would pull in 784 B of libgcc. */
     sb_printf("[sb] staying in bootloader after %u us: %s\r\n",
-              (uint32_t)((uint64_t)sb_cyc() * 1000000u / SB_SYSCLK_HZ), why);
+              sb_cyc() / (SB_SYSCLK_HZ / 1000000u), why);
     sb_printf("[sb] UART update mode not available yet (waiting for USB-serial adapter)\r\n");
     for (;;) {
         sb_led(LED_RED, 1);
@@ -133,6 +142,13 @@ int main(void)
     sb_journal_t j;
     sb_journal_scan(&j);
     bi->cyc[SB_CP_JOURNAL] = sb_cyc();
+#ifdef SB_FAULT_INJECT
+    if (FI->magic == SB_FI_MAGIC && FI->fired && !FI->post_valid) {
+        FI->post_have = (uint32_t)j.have_cur;
+        memcpy((void *)FI->post_rec, &j.cur, sizeof FI->post_rec);
+        FI->post_valid = 1;
+    }
+#endif
     bi->hz[SB_CP_JOURNAL] = SB_SYSCLK_HZ;
     if (j.have_cur)
         sb_printf("[sb] journal seq %u: A=%s v%u  B=%s v%u  active=%d cand=%d att=%u/%u min_ver=%u\r\n",

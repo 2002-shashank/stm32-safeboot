@@ -87,8 +87,9 @@ class Record:
         return tuple(getattr(self, f.name) for f in fields(self))[2:-2]
 
     def describe(self) -> str:
-        a = "-" if self.active == SLOT_NONE else "AB"[self.active]
-        c = "-" if self.candidate == SLOT_NONE else "AB"[self.candidate]
+        def slot(v: int) -> str:
+            return "-" if v == SLOT_NONE else "AB"[v] if v < 2 else f"?{v}"
+        a, c = slot(self.active), slot(self.candidate)
         return (f"seq {self.seq}: A={STATES.get(self.state_a, '?')} v{self.version_a} "
                 f"B={STATES.get(self.state_b, '?')} v{self.version_b} active={a} cand={c} "
                 f"att={self.attempts}/{self.max_attempts} min_ver={self.min_version}")

@@ -26,6 +26,12 @@
 #define APP_BEHAVIOR 0
 #endif
 
+#ifdef APP_FILLER_BYTES
+/* Padding to bring the image near the 392,704 B slot limit for worst-case
+ * boot timing (SHA-256 time depends only on length, not content). */
+static const uint8_t filler[APP_FILLER_BYTES] = {1};
+#endif
+
 volatile uint32_t app_cmd;          /* SWD mailbox: host writes a command char */
 volatile int32_t app_confirm_rc = 0x7FFFFFFF;
 volatile uint32_t app_alive;
@@ -117,6 +123,12 @@ int main(void)
     sb_printf("[app] v%u running from slot %c (behavior %u)\r\n", APP_VERSION, 'A' + (int)slot,
               APP_BEHAVIOR);
     print_boot_timing(bi);
+#ifdef APP_FILLER_BYTES
+    /* Runtime reference keeps --gc-sections from dropping the filler. */
+    volatile uint32_t last = APP_FILLER_BYTES - 1;
+    sb_printf("[app] image carries %u B of filler (last byte %u)\r\n", APP_FILLER_BYTES,
+              filler[last]);
+#endif
 
 #if APP_BEHAVIOR == 1
     sb_printf("[app] simulated init failure: faulting before boot_confirm()\r\n");

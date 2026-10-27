@@ -58,6 +58,8 @@ sb_firmware_outputs(bootloader)
 set(SB_SIGNING_KEY ${PROJECT_SOURCE_DIR}/keys/dev_ed25519.pem CACHE FILEPATH "Ed25519 signing key (PEM)")
 set(SB_PYTHON ${PROJECT_SOURCE_DIR}/.venv/bin/python CACHE FILEPATH "Python with 'cryptography'")
 
+# Optional 5th argument: bytes of incompressible filler, to build near
+# maximum-size images for worst-case boot timing.
 function(sb_app name slot version behavior)
     if(slot STREQUAL "A")
         set(origin 0x08020200)
@@ -68,6 +70,9 @@ function(sb_app name slot version behavior)
         ${PROJECT_SOURCE_DIR}/core/src/crc32.c ${PROJECT_SOURCE_DIR}/core/src/crash.c)
     target_include_directories(${name} PRIVATE ${SB_COMMON_DIR} ${SB_CMSIS_INCLUDES} ${SB_CORE_INCLUDE})
     target_compile_definitions(${name} PRIVATE STM32F407xx APP_VERSION=${version} APP_BEHAVIOR=${behavior})
+    if(ARGC GREATER 4)
+        target_compile_definitions(${name} PRIVATE APP_FILLER_BYTES=${ARGV4})
+    endif()
     target_compile_options(${name} PRIVATE -Os -g ${SB_TARGET_WARNINGS})
     target_link_options(${name} PRIVATE -T${CMAKE_CURRENT_SOURCE_DIR}/app/app.ld
         -Wl,--defsym=SB_APP_ORIGIN=${origin} -Wl,-Map=${name}.map)
@@ -86,6 +91,7 @@ sb_app(app_b_v2 B 2 0)
 sb_app(app_a_v3 A 3 0)
 sb_app(app_b_v3_crash B 3 1)
 sb_app(app_b_v3_hang B 3 2)
+sb_app(app_a_max A 1 0 386000)
 
 # ---------------- bench (Phase 0 measurements) ----------------
 add_executable(bench bench/bench.c common/startup.c common/board.c common/flash_f4.c common/rtt.c)
@@ -95,3 +101,14 @@ target_compile_options(bench PRIVATE -Os -g ${SB_TARGET_WARNINGS})
 target_link_libraries(bench PRIVATE sb_target_core)
 target_link_options(bench PRIVATE -T${CMAKE_CURRENT_SOURCE_DIR}/bootloader/bootloader.ld -Wl,-Map=bench.map)
 sb_firmware_outputs(bench)
+
+# ---------------- bootloader with hardware fault injection ----------------
+add_executable(bootloader_fi
+    bootloader/main.c bootloader/api.c common/startup.c common/board.c common/flash_f4.c common/rtt.c)
+target_include_directories(bootloader_fi PRIVATE ${SB_COMMON_DIR} ${SB_CMSIS_INCLUDES})
+target_compile_definitions(bootloader_fi PRIVATE STM32F407xx SB_STARTUP_RESET_CYCCNT SB_FAULT_INJECT)
+target_compile_options(bootloader_fi PRIVATE -Os -g ${SB_TARGET_WARNINGS})
+target_link_libraries(bootloader_fi PRIVATE sb_target_core)
+target_link_options(bootloader_fi PRIVATE
+    -T${CMAKE_CURRENT_SOURCE_DIR}/bootloader/bootloader.ld -Wl,-Map=bootloader_fi.map)
+sb_firmware_outputs(bootloader_fi)
