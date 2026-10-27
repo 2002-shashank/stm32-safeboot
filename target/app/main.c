@@ -7,7 +7,10 @@
  *   b = precise bus fault (load from unmapped memory; BFAR valid),
  *   w = imprecise bus fault (buffered store; BFAR not valid),
  *   d = divide by zero, u = undefined instruction,
- *   a = app assert, h = hang (stop kicking IWDG), r = soft reset, i = info.
+ *   a = app assert, h = hang (stop kicking IWDG), r = soft reset, i = info,
+ *   U = reboot into the bootloader's UART update mode.
+ * On USART2 (PA2/PA3, 115200) the app listens for "SBUPDATE", which does the
+ * same as U, so a host can start an update over the serial link alone.
  */
 #include <string.h>
 
@@ -18,6 +21,7 @@
 #include "sb/crc32.h"
 #include "sb/layout.h"
 #include "sb_api.h"
+#include "uart.h"
 
 #ifndef APP_VERSION
 #define APP_VERSION 1
@@ -94,6 +98,14 @@ static void do_command(char ch)
             ;
     case 'r':
         NVIC_SystemReset();
+    case 'U': {
+        const sb_api_t *api = sb_api_v(2);
+        sb_printf("[app] update requested: rebooting into the bootloader\r\n");
+        if (api)
+            api->boot_request_update();
+        sb_printf("[app] bootloader has no update API (v1)\r\n");
+        break;
+    }
     case 'i': {
         const sb_api_t *api = sb_api();
         if (api)
@@ -145,7 +157,18 @@ int main(void)
     app_confirm_rc = api ? api->boot_confirm() : -100;
     sb_printf("[app] boot_confirm() = %d\r\n", (int)app_confirm_rc);
 
+    static uint8_t uart_ring[256];
+    static const char magic[] = "SBUPDATE";
+    unsigned matched = 0;
+    sb_uart_init(115200, uart_ring, sizeof uart_ring);
+
     for (uint32_t n = 0;; n++) {
+        uint8_t b;
+        while (sb_uart_read(&b, 1)) {
+            matched = b == (uint8_t)magic[matched] ? matched + 1 : b == (uint8_t)magic[0];
+            if (matched == sizeof magic - 1)
+                do_command('U');
+        }
         sb_iwdg_kick();
         sb_led(led, (n & 1u) == 0);
         app_alive = n;

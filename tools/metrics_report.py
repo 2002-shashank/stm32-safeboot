@@ -165,6 +165,16 @@ def main() -> None:
             o.append(f"| {baud} baud, {r['burst_bytes']} B burst | {r['erase_ms']} ms | "
                      f"{r['bytes_received_during_erase']} | {r['received']} | {'OK' if r['crc_ok'] else 'BAD'} |")
         o.append("")
+    uu = load("board_uart_update.json")
+    if uu:
+        o += ["## UART updates (on board, `board_uart_update.json`)", "", "| Test | Result | Pass |", "|---|---|---|"]
+        for t in uu:
+            r = t.get("result") or {}
+            info = (f"{r['goodput_KBps']} KB/s, {r['retries']} retries" if r else t.get("error", "")[:80])
+            if r.get("resumed_from"):
+                info += f", resumed at {r['resumed_from']}"
+            o.append(f"| {t['test']} | {info} | {'✅' if t['pass'] else '❌'} |")
+        o.append("")
     o += ["## Not yet measured", "",
           "- Reset release → first instruction (needs a logic analyzer).", ""]
     (M / "metrics.md").write_text("\n".join(o))

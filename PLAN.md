@@ -4,9 +4,8 @@ A secure, power-fail-safe A/B bootloader for the STM32F407: signed images (SHA-2
 anti-rollback, a resumable UART update path, trial boots with automatic rollback, and a persistent
 crash record. Every phase records measurements as it is built (see §9).
 
-**Status (2026-10-26):** Phase 0 is done. Phases 1–4 and 6 are built and tested on the board over SWD.
-Phase 5 (UART) has its protocol core and simulator tests, but no wire. Detailed, current design
-docs: [`docs/flash-layout.md`](docs/flash-layout.md), [`docs/journal.md`](docs/journal.md),
+**Status (2026-10-26):** Phase 0 is done. Phases 1–6 are built and tested on the board. Detailed, current design
+docs: [`docs/flash-layout.md`](docs/flash-layout.md), [`docs/journal.md`](docs/journal.md), [`docs/protocol.md`](docs/protocol.md),
 [`docs/threat-model.md`](docs/threat-model.md). Measurements: [`metrics/metrics.md`](metrics/metrics.md).
 Where this plan and the docs differ, the docs describe what was built.
 
@@ -293,7 +292,7 @@ records the git hash, board, clock, and compiler flags.
 | 2 | ✅ RAM-resident driver, journal, simulator harness (100% pass), erase/program timings measured on board, plus on-silicon reset injection (`bootloader_fi`) |
 | 3 | ✅ Signing tool, SHA-256 + Ed25519 on every boot. Tamper, wrong-slot and wrong-key images are rejected, in C, Python and on the board. |
 | 4 | ✅ Trial, confirm and rollback by crash and by IWDG hang, verified on the board. Updates are staged over SWD until UART exists. |
-| 5 | ◐ Protocol core and resume logic are done and fault-tested in the simulator. The UART driver (DMA RX), the host CLI and throughput are pending the CP2102. |
+| 5 | ✅ Over the CP2102: 391 KB at 43.6 KB/s (921,600 baud). Recovers from injected drop/corrupt/duplicate/lost-ACK faults. Resumes after a link drop and after a device reset. Anti-rollback and tamper rejection verified ([`docs/protocol.md`](docs/protocol.md)). |
 | 6 | ✅ Crash record in backup SRAM, decoded by the bootloader (precise and imprecise BusFault, DIVBYZERO, UNDEFINSTR, assert). Measured: the record survives every reset type but not power-off. |
 | 7 | ◐ Threat model written and metrics report generated. A real power-cut campaign is **not possible** (no rig). |
 

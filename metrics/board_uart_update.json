@@ -1,0 +1,170 @@
+[
+  {
+    "test": "full 391092 B image at 921600 baud, trial-boots and confirms",
+    "pass": true,
+    "result": {
+      "image": "app_b_max_v2.sbimg",
+      "version": 2,
+      "bytes": 391092,
+      "baud": 921600,
+      "actual_baud": 913043,
+      "resumed_from": 0,
+      "data_seconds": 8.74,
+      "goodput_KBps": 43.7,
+      "verify_ms": 174,
+      "frames": 389,
+      "retries": 0,
+      "timeouts": 0,
+      "resyncs": 0,
+      "nacks": {},
+      "injected": {},
+      "slot_state": "PENDING"
+    },
+    "error": "",
+    "journal": "seq 29: A=VALID v1 B=CONFIRMED v2 active=B cand=- att=0/3 min_ver=2"
+  },
+  {
+    "test": "full 391092 B image at 460800 baud, trial-boots and confirms",
+    "pass": true,
+    "result": {
+      "image": "app_a_max_v3.sbimg",
+      "version": 3,
+      "bytes": 391092,
+      "baud": 460800,
+      "actual_baud": 461538,
+      "resumed_from": 0,
+      "data_seconds": 13.16,
+      "goodput_KBps": 29.0,
+      "verify_ms": 175,
+      "frames": 389,
+      "retries": 0,
+      "timeouts": 0,
+      "resyncs": 0,
+      "nacks": {},
+      "injected": {},
+      "slot_state": "PENDING"
+    },
+    "error": "",
+    "journal": "seq 57: A=CONFIRMED v3 B=VALID v2 active=A cand=- att=0/3 min_ver=3"
+  },
+  {
+    "test": "injected faults (5% drop, 5% corrupt, 2% duplicate, 5% lost ACK): completes and confirms",
+    "pass": true,
+    "result": {
+      "image": "app_b_max_v4.sbimg",
+      "version": 4,
+      "bytes": 391092,
+      "baud": 921600,
+      "actual_baud": 913043,
+      "resumed_from": 0,
+      "data_seconds": 124.3,
+      "goodput_KBps": 3.1,
+      "verify_ms": 174,
+      "frames": 471,
+      "retries": 76,
+      "timeouts": 78,
+      "resyncs": 2,
+      "nacks": {},
+      "injected": {
+        "lose_ack": 28,
+        "drop": 24,
+        "corrupt": 22,
+        "dup": 6
+      },
+      "slot_state": "PENDING"
+    },
+    "error": "",
+    "journal": "seq 85: A=VALID v3 B=CONFIRMED v4 active=B cand=- att=0/3 min_ver=4"
+  },
+  {
+    "test": "host stops at ~200 KB (link drop), rerun resumes at the exact offset",
+    "pass": true,
+    "aborted_at": 204800,
+    "result": {
+      "image": "app_a_max_v5.sbimg",
+      "version": 5,
+      "bytes": 391092,
+      "baud": 921600,
+      "actual_baud": 921600,
+      "resumed_from": 204800,
+      "data_seconds": 3.94,
+      "goodput_KBps": 46.2,
+      "verify_ms": 174,
+      "frames": 188,
+      "retries": 0,
+      "timeouts": 0,
+      "resyncs": 0,
+      "nacks": {},
+      "injected": {},
+      "slot_state": "PENDING"
+    },
+    "error": "",
+    "journal": "seq 113: A=CONFIRMED v5 B=VALID v4 active=A cand=- att=0/3 min_ver=5"
+  },
+  {
+    "test": "device reset at ~200 KB, rerun resumes from the last 16 KB journal checkpoint",
+    "pass": true,
+    "aborted_at": 204800,
+    "result": {
+      "image": "app_b_max_v6.sbimg",
+      "version": 6,
+      "bytes": 391092,
+      "baud": 921600,
+      "actual_baud": 913043,
+      "resumed_from": 196608,
+      "data_seconds": 4.03,
+      "goodput_KBps": 47.1,
+      "verify_ms": 174,
+      "frames": 197,
+      "retries": 0,
+      "timeouts": 0,
+      "resyncs": 0,
+      "nacks": {},
+      "injected": {},
+      "slot_state": "PENDING"
+    },
+    "error": "",
+    "journal": "seq 141: A=VALID v5 B=CONFIRMED v6 active=B cand=- att=0/3 min_ver=6"
+  },
+  {
+    "test": "first 96 KB at 115200 baud, resumed and finished at 921600",
+    "pass": true,
+    "partial_115200": {
+      "aborted_at": 98304
+    },
+    "result": {
+      "image": "app_a_max_v7.sbimg",
+      "version": 7,
+      "bytes": 391092,
+      "baud": 921600,
+      "actual_baud": 913043,
+      "resumed_from": 98304,
+      "data_seconds": 6.39,
+      "goodput_KBps": 44.7,
+      "verify_ms": 174,
+      "frames": 293,
+      "retries": 0,
+      "timeouts": 0,
+      "resyncs": 0,
+      "nacks": {},
+      "injected": {},
+      "slot_state": "PENDING"
+    },
+    "error": "",
+    "journal": "seq 169: A=CONFIRMED v7 B=VALID v6 active=A cand=- att=0/3 min_ver=7"
+  },
+  {
+    "test": "older version (v2 < floor 7) refused at IMAGE_INFO; v7 keeps running from slot A",
+    "pass": true,
+    "error": "IMAGE_INFO: ERR_VERSION (anti-rollback: version not newer than the device's floor)",
+    "running": "slot A",
+    "journal": "seq 170: A=CONFIRMED v7 B=EMPTY v0 active=A cand=- att=0/3 min_ver=7"
+  },
+  {
+    "test": "tampered v8 transferred, rejected at VERIFY (slot B INVALID), v7 keeps running from slot A",
+    "pass": true,
+    "error": "VERIFY failed: ERR_VERIFY (verify result -4)",
+    "running": "slot A",
+    "journal": "seq 196: A=CONFIRMED v7 B=INVALID v0 active=A cand=- att=0/3 min_ver=7"
+  }
+]

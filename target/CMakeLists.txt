@@ -38,6 +38,7 @@ set_source_files_properties(${SB_CORE_SOURCES} PROPERTIES COMPILE_OPTIONS "${SB_
 add_executable(bootloader
     bootloader/main.c
     bootloader/api.c
+    common/uart.c
     common/fault.c
     common/startup.c
     common/board.c
@@ -67,7 +68,7 @@ function(sb_app name slot version behavior)
     else()
         set(origin 0x08080200)
     endif()
-    add_executable(${name} app/main.c common/startup.c common/board.c common/rtt.c common/fault.c
+    add_executable(${name} app/main.c common/startup.c common/board.c common/rtt.c common/fault.c common/uart.c
         ${PROJECT_SOURCE_DIR}/core/src/crc32.c ${PROJECT_SOURCE_DIR}/core/src/crash.c)
     target_include_directories(${name} PRIVATE ${SB_COMMON_DIR} ${SB_CMSIS_INCLUDES} ${SB_CORE_INCLUDE})
     target_compile_definitions(${name} PRIVATE STM32F407xx APP_VERSION=${version} APP_BEHAVIOR=${behavior})
@@ -93,6 +94,14 @@ sb_app(app_a_v3 A 3 0)
 sb_app(app_b_v3_crash B 3 1)
 sb_app(app_b_v3_hang B 3 2)
 sb_app(app_a_max A 1 0 386000)
+# Near-maximum images with rising versions for the UART update tests.
+sb_app(app_b_max_v2 B 2 0 386000)
+sb_app(app_a_max_v3 A 3 0 386000)
+sb_app(app_b_max_v4 B 4 0 386000)
+sb_app(app_a_max_v5 A 5 0 386000)
+sb_app(app_b_max_v6 B 6 0 386000)
+sb_app(app_a_max_v7 A 7 0 386000)
+sb_app(app_b_max_v8 B 8 0 386000)
 
 # ---------------- bench (Phase 0 measurements) ----------------
 add_executable(bench bench/bench.c common/startup.c common/board.c common/flash_f4.c common/rtt.c)
@@ -105,8 +114,8 @@ sb_firmware_outputs(bench)
 
 # ---------------- bootloader with hardware fault injection ----------------
 add_executable(bootloader_fi
-    bootloader/main.c bootloader/api.c common/fault.c common/startup.c common/board.c common/flash_f4.c
-    common/rtt.c)
+    bootloader/main.c bootloader/api.c common/uart.c common/fault.c common/startup.c common/board.c
+    common/flash_f4.c common/rtt.c)
 target_include_directories(bootloader_fi PRIVATE ${SB_COMMON_DIR} ${SB_CMSIS_INCLUDES})
 target_compile_definitions(bootloader_fi PRIVATE STM32F407xx SB_STARTUP_RESET_CYCCNT SB_FAULT_INJECT)
 target_compile_options(bootloader_fi PRIVATE -Os -g ${SB_TARGET_WARNINGS})

@@ -13,7 +13,7 @@
 #include "sb/layout.h"
 
 #define SB_API_MAGIC 0x49504153u   /* "SAPI" */
-#define SB_API_VERSION 1u
+#define SB_API_VERSION 2u
 
 typedef struct {
     uint32_t magic;
@@ -22,12 +22,20 @@ typedef struct {
     int (*boot_confirm)(void);
     /* Boot decision, reset reason and DWT checkpoints of this boot. */
     const sb_bootinfo_t *(*boot_info)(void);
+    /* v2: reset into the bootloader's UART update mode. Does not return. */
+    void (*boot_request_update)(void);
 } sb_api_t;
+
+/* Returns the table if the bootloader provides at least API version `min`. */
+static inline const sb_api_t *sb_api_v(uint32_t min)
+{
+    const sb_api_t *a = (const sb_api_t *)SB_API_ADDR;
+    return a->magic == SB_API_MAGIC && a->version >= min ? a : 0;
+}
 
 static inline const sb_api_t *sb_api(void)
 {
-    const sb_api_t *a = (const sb_api_t *)SB_API_ADDR;
-    return a->magic == SB_API_MAGIC && a->version >= SB_API_VERSION ? a : 0;
+    return sb_api_v(1);
 }
 
 #endif

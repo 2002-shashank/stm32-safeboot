@@ -19,6 +19,8 @@ enum sb_cmd {
     SB_CMD_FINALIZE = 0x05,       /* total u32 */
     SB_CMD_VERIFY = 0x06,         /* activate u8 */
     SB_CMD_REBOOT = 0x07,         /* - */
+    SB_CMD_SET_BAUD = 0x08,       /* baud u32; handled by the transport, not the core:
+                                   * reply at the old rate (a = actual baud), then switch */
     SB_RESP_FLAG = 0x80,
 };
 

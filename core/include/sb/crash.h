@@ -67,9 +67,12 @@ typedef struct {
     uint32_t crc;
 } sb_bootinfo_t;
 
+#define SB_REQ_UPDATE 0x55504454u   /* "UPDT": app asks for UART update mode */
+
 typedef struct {
     sb_bootinfo_t info;
     sb_crash_t crash;
+    uint32_t request;   /* SB_REQ_UPDATE, consumed by the next boot */
 } sb_shared_t;
 
 static inline uint32_t sb_crash_crc_len(void)

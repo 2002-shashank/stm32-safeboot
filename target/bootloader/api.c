@@ -42,9 +42,21 @@ static const sb_bootinfo_t *api_boot_info(void)
     return &((const sb_shared_t *)SB_BKPSRAM_ADDR)->info;
 }
 
+static void api_boot_request_update(void)
+{
+    RCC->APB1ENR |= RCC_APB1ENR_PWREN;
+    RCC->AHB1ENR |= RCC_AHB1ENR_BKPSRAMEN;
+    (void)RCC->AHB1ENR;
+    PWR->CR |= PWR_CR_DBP;
+    ((sb_shared_t *)SB_BKPSRAM_ADDR)->request = SB_REQ_UPDATE;
+    __DSB();
+    NVIC_SystemReset();
+}
+
 __attribute__((section(".sb_api"), used)) const sb_api_t sb_api_table = {
     .magic = SB_API_MAGIC,
     .version = SB_API_VERSION,
     .boot_confirm = api_boot_confirm,
     .boot_info = api_boot_info,
+    .boot_request_update = api_boot_request_update,
 };

@@ -3,6 +3,11 @@
  * decision with full SHA-256 + Ed25519 verification, trial watchdog, and
  * handoff. DWT checkpoints go into the boot info in backup SRAM; the app
  * reads them and prints the breakdown.
+ *
+ * UART update mode (USART2 PA2/PA3, 115200 baud until the host sends
+ * SET_BAUD) is entered when nothing is bootable, when the app requested it
+ * (sb_api boot_request_update), or when the user button (PA0) is held at
+ * reset. Entered by request or button, it resets after 30 s without traffic.
  */
 #include <string.h>
 
@@ -14,13 +19,20 @@
 #include "sb/crc32.h"
 #include "sb/image.h"
 #include "sb/journal.h"
+#include "sb/frame.h"
 #include "sb/layout.h"
+#include "sb/proto.h"
+#include "uart.h"
 #ifdef SB_FAULT_INJECT
 #include "sb/fault_inject.h"
 #define FI ((volatile sb_fi_t *)SB_FI_ADDR)
 #endif
 
 #define SB_TRIAL_WDG_MS 4000u
+#define SB_UPDATE_BAUD 115200u
+#define SB_UPDATE_IDLE_S 30u
+#define SB_FRAME_GAP_MS 100u   /* inter-byte gap that abandons a partial frame */
+#define SB_BAUD_REVERT_MS 3000u /* idle time after which the link returns to SB_UPDATE_BAUD */
 
 static sb_shared_t *sh;
 
@@ -68,7 +80,50 @@ static void report_crash(uint32_t rr)
     c->consumed = 1;   /* outside the CRC: the record stays valid for the app */
 }
 
-static __attribute__((noreturn)) void update_mode(const char *why)
+static uint8_t uart_ring[4096];
+static sb_frame_parser_t parser;
+static sb_proto_t proto;
+static uint32_t cur_baud = SB_UPDATE_BAUD;
+
+static void send_frame(uint8_t type, uint16_t seq, const uint8_t *payload, uint16_t len)
+{
+    uint8_t out[SB_RESP_LEN + SB_FRAME_OVERHEAD];
+    uint32_t n = sb_frame_encode(out, type, seq, payload, len);
+    sb_uart_write(out, n);
+}
+
+static void handle_frame(const sb_frame_t *f)
+{
+    uint8_t resp[SB_RESP_LEN];
+    uint8_t type = f->type | SB_RESP_FLAG;
+    if (f->type == SB_CMD_SET_BAUD) {
+        /* Transport-level: reply at the old rate, then switch. */
+        memset(resp, 0, sizeof resp);
+        uint32_t baud = f->len == 4 ? sb_get_le32(f->payload) : 0;
+        int ok = baud >= 9600u && baud <= 1000000u;
+        resp[0] = ok ? SB_S_OK : SB_S_ERR_LEN;
+        sb_put_le32(resp + 8, ok ? sb_uart_actual_baud(baud) : 0);
+        send_frame(type, f->seq, resp, sizeof resp);
+        if (ok) {
+            sb_uart_set_baud(baud);
+            cur_baud = baud;
+            sb_printf("[sb] uart %u baud\r\n", sb_uart_actual_baud(baud));
+        }
+        return;
+    }
+    sb_proto_handle(&proto, f->type, f->seq, f->payload, f->len, resp);
+    send_frame(type, f->seq, resp, sizeof resp);
+    if (f->type != SB_CMD_DATA && f->type != SB_CMD_QUERY_PROGRESS)
+        sb_printf("[sb] cmd 0x%02x -> status %u next %u\r\n", f->type, resp[0], sb_get_le32(resp + 4));
+    if (proto.reboot) {
+        sb_printf("[sb] reboot requested\r\n");
+        sb_delay_cycles(SB_SYSCLK_HZ / 100);
+        NVIC_SystemReset();
+    }
+}
+
+static __attribute__((noreturn)) void update_mode(const char *why, sb_journal_t *j,
+                                                  const sb_prov_t *prov, int idle_reset)
 {
 #ifdef SB_FAULT_INJECT
     if (FI->magic == SB_FI_MAGIC)
@@ -77,13 +132,65 @@ static __attribute__((noreturn)) void update_mode(const char *why)
     /* 32-bit divide: a 64-bit one would pull in 784 B of libgcc. */
     sb_printf("[sb] staying in bootloader after %u us: %s\r\n",
               sb_cyc() / (SB_SYSCLK_HZ / 1000000u), why);
-    sb_printf("[sb] UART update mode not available yet (waiting for USB-serial adapter)\r\n");
-    for (;;) {
-        sb_led(LED_RED, 1);
-        sb_delay_cycles(SB_SYSCLK_HZ / 10);
-        sb_led(LED_RED, 0);
-        sb_delay_cycles(SB_SYSCLK_HZ / 10 * 9);
+    sb_uart_init(SB_UPDATE_BAUD, uart_ring, sizeof uart_ring);
+    sb_proto_init(&proto, j, prov, mark);
+    sb_printf("[sb] UART update mode on USART2 (PA2/PA3), %u baud\r\n", SB_UPDATE_BAUD);
+
+    const uint32_t gap = SB_SYSCLK_HZ / 1000u * SB_FRAME_GAP_MS;
+    const uint64_t idle_limit = (uint64_t)SB_SYSCLK_HZ * SB_UPDATE_IDLE_S;
+    uint32_t prev = sb_cyc(), since_rx = 0;
+    uint64_t idle = 0;   /* accumulated, so it survives CYCCNT wrap (25.6 s) */
+    int partial = 0;
+    for (uint32_t n = 0;; n++) {
+        sb_iwdg_kick();   /* harmless if the IWDG is not running */
+        uint32_t now = sb_cyc(), d = now - prev;
+        prev = now;
+        uint8_t buf[64];
+        size_t got = sb_uart_read(buf, sizeof buf);
+        if (got) {
+            idle = 0;
+            since_rx = 0;
+        } else {
+            idle += d;
+            since_rx = since_rx + d > since_rx ? since_rx + d : 0xFFFFFFFFu;
+        }
+        if (partial && since_rx > gap) {
+            sb_frame_reset(&parser);   /* host gave up mid-frame */
+            partial = 0;
+        }
+        if (cur_baud != SB_UPDATE_BAUD && since_rx > SB_SYSCLK_HZ / 1000u * SB_BAUD_REVERT_MS) {
+            /* Host went away at a higher rate: let a new session start at the default. */
+            sb_uart_set_baud(SB_UPDATE_BAUD);
+            cur_baud = SB_UPDATE_BAUD;
+            sb_printf("[sb] link idle: back to %u baud\r\n", SB_UPDATE_BAUD);
+        }
+        for (size_t i = 0; i < got; i++) {
+            partial = 1;
+            if (sb_frame_feed(&parser, buf[i])) {
+                partial = 0;
+                handle_frame(&parser.f);
+            }
+        }
+        if (idle_reset && idle > idle_limit) {
+            sb_printf("[sb] update mode idle for %u s: rebooting\r\n", SB_UPDATE_IDLE_S);
+            sb_delay_cycles(SB_SYSCLK_HZ / 100);
+            NVIC_SystemReset();
+        }
+        sb_led(LED_RED, (n >> 17) & 1u);
     }
+}
+
+static int button_held(void)
+{
+    RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+    (void)RCC->AHB1ENR;
+    /* B1 on PA0: external pull-down, reads 1 while pressed. Debounce. */
+    for (int i = 0; i < 5; i++) {
+        if (!(GPIOA->IDR & 1u))
+            return 0;
+        sb_delay_cycles(SB_SYSCLK_HZ / 1000);
+    }
+    return 1;
 }
 
 static __attribute__((noreturn)) void jump(uint32_t vt)
@@ -140,10 +247,7 @@ int main(void)
     report_crash(rr);
 
     const sb_prov_t *prov = sb_prov_get();
-    if (!prov)
-        update_mode("device not provisioned (no public key in S4)");
-
-    sb_journal_t j;
+    static sb_journal_t j;   /* static: update mode keeps using it */
     sb_journal_scan(&j);
     bi->cyc[SB_CP_JOURNAL] = sb_cyc();
 #ifdef SB_FAULT_INJECT
@@ -163,6 +267,15 @@ int main(void)
     else
         sb_printf("[sb] journal empty\r\n");
 
+    if (!prov)
+        update_mode("device not provisioned (no public key in S4)", &j, NULL, 0);
+    int requested = sh->request == SB_REQ_UPDATE;
+    sh->request = 0;
+    if (requested)
+        update_mode("update requested by the app", &j, prov, 1);
+    if (button_held())
+        update_mode("user button held at reset", &j, prov, 1);
+
     sb_boot_decision_t d;
     sb_boot_decide(&j, prov, mark, &d);
     bi->hz[SB_CP_SHA] = bi->hz[SB_CP_SIG] = SB_SYSCLK_HZ;
@@ -172,7 +285,8 @@ int main(void)
     bi->attempts = d.attempts;
     bi->version = d.version;
     if (d.target == SB_BOOT_UPDATE_MODE)
-        update_mode(d.reason == SB_R_JOURNAL_ERROR ? "journal write failed" : "no bootable image");
+        update_mode(d.reason == SB_R_JOURNAL_ERROR ? "journal write failed" : "no bootable image",
+                    &j, prov, 0);
 
     sb_printf("[sb] boot %s v%u (", d.target == SB_BOOT_RECOVERY_IMAGE ? "recovery" :
                                     d.target == SB_BOOT_SLOT_A ? "slot A" : "slot B",
