@@ -268,11 +268,16 @@ def dump(o: OpenOCD, addr: int, size: int) -> bytes:
     """Binary memory read via dump_image: fast, and unlike read_memory it
     does not echo every word into the OpenOCD log."""
     tmp = ROOT / "build" / "dump_tmp.bin"
-    o.cmd(f"dump_image {{{tmp}}} 0x{addr:08X} {size}")
-    data = tmp.read_bytes()
-    if len(data) != size:
-        raise RuntimeError(f"dump of 0x{addr:08X} returned {len(data)} of {size} bytes")
-    return data
+    # A flash read over SWD stalls while the single-bank flash erases (up to
+    # ~1 s for 128 KB) and the ST-LINK may give up: retry a few times.
+    for attempt in range(8):
+        tmp.unlink(missing_ok=True)
+        o.cmd(f"dump_image {{{tmp}}} 0x{addr:08X} {size}")
+        data = tmp.read_bytes() if tmp.exists() else b""
+        if len(data) == size:
+            return data
+        time.sleep(0.3)
+    raise RuntimeError(f"dump of 0x{addr:08X} returned {len(data)} of {size} bytes after retries")
 
 
 def read_journal(o: OpenOCD) -> sj.Journal:
@@ -527,18 +532,33 @@ def fi_state(o: OpenOCD) -> dict:
             "recovery": w[25]}
 
 
+SETTLE_S = 2.0   # quiet time for the device to finish (longest sequence ~1.5 s incl. compaction)
+
+
 def wait_journal(o: OpenOCD, final_ok, secs: float, need_fired: bool) -> tuple[sj.Record | None, dict]:
-    """Poll (target running) until the journal reaches the goal state, and,
-    for injected runs, the bootloader has recorded its post-reset scan."""
-    t0, cur, st = time.time(), None, {}
-    while time.time() - t0 < secs:
-        time.sleep(0.25)
-        st = fi_state(o)
-        if need_fired and not (st["fired"] and st["post_valid"]):
-            continue
+    """Wait for the device to reach the goal, then read the journal with the
+    core halted.
+
+    Flash is never read over SWD while the device may be erasing: such a read
+    stalls until the erase finishes, and in testing the device then sometimes
+    failed to take its own reset request or ran off the end of its RAM
+    routine. Only the backup-SRAM evidence block is polled while it runs."""
+    t0, st = time.time(), {}
+    if need_fired:
+        while time.time() - t0 < secs:
+            time.sleep(0.2)
+            st = fi_state(o)
+            if st["fired"] and st["post_valid"]:
+                break
+    cur = None
+    for _ in range(3):
+        time.sleep(SETTLE_S)
+        o.cmd("halt")
         cur = read_journal(o).cur
+        st = fi_state(o) if need_fired else st
         if final_ok(cur):
-            return cur, st
+            break
+        o.cmd("resume")
     return cur, st
 
 
@@ -583,12 +603,17 @@ def fi_campaign(o: OpenOCD, name: str, image: str, final_ok, compact_at: int | N
         for mode, delay in variants:
             runs += 1
             t0 = time.time()
-            restore_journal(o, pages)
-            fi_arm(o, k, mode, delay)
-            o.cmd("reset run")
-            cur, st = wait_journal(o, final_ok, 20, need_fired=True)
             err = None
-            if not st.get("fired"):
+            try:
+                restore_journal(o, pages)
+                fi_arm(o, k, mode, delay)
+                o.cmd("reset run")
+                cur, st = wait_journal(o, final_ok, 20, need_fired=True)
+            except Exception as e:   # host/probe trouble: count it, keep going
+                cur, st, err = None, {}, f"host error: {e}"
+            if err:
+                pass
+            elif not st.get("fired"):
                 err = "injection did not fire"
             elif not st.get("post_valid"):
                 err = "no boot recorded after the injected reset"

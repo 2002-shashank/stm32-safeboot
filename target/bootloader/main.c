@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "board.h"
+#include "fault.h"
 #include "rtt.h"
 #include "sb/boot.h"
 #include "sb/crash.h"
@@ -118,6 +119,9 @@ int main(void)
 
     sb_rtt_init();
     sb_leds_init();
+    /* A fault in the bootloader records a crash (slot 0xFF) and resets
+     * instead of spinning in the default handler forever. */
+    sb_fault_init(0, 0xFFu);
 
     sb_bootinfo_t *bi = &sh->info;
     uint32_t boots = bi->magic == SB_BOOTINFO_MAGIC ? bi->boot_count + 1 : 1;

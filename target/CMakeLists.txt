@@ -38,6 +38,7 @@ set_source_files_properties(${SB_CORE_SOURCES} PROPERTIES COMPILE_OPTIONS "${SB_
 add_executable(bootloader
     bootloader/main.c
     bootloader/api.c
+    common/fault.c
     common/startup.c
     common/board.c
     common/flash_f4.c
@@ -104,7 +105,8 @@ sb_firmware_outputs(bench)
 
 # ---------------- bootloader with hardware fault injection ----------------
 add_executable(bootloader_fi
-    bootloader/main.c bootloader/api.c common/startup.c common/board.c common/flash_f4.c common/rtt.c)
+    bootloader/main.c bootloader/api.c common/fault.c common/startup.c common/board.c common/flash_f4.c
+    common/rtt.c)
 target_include_directories(bootloader_fi PRIVATE ${SB_COMMON_DIR} ${SB_CMSIS_INCLUDES})
 target_compile_definitions(bootloader_fi PRIVATE STM32F407xx SB_STARTUP_RESET_CYCCNT SB_FAULT_INJECT)
 target_compile_options(bootloader_fi PRIVATE -Os -g ${SB_TARGET_WARNINGS})
